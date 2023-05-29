@@ -1,0 +1,305 @@
+<!DOCTYPE html>
+<html lang="en"><head>
+<meta http-equiv="content-type" content="text/html; charset=UTF-8">
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+
+    <title>Building a Program Synthesizer — James Bornholt</title>
+    <meta name="description" content="Build a program synthesis tool, to generate programs from specifications, in 20 lines of code using Rosette.">
+
+    <meta name="twitter:card" content="summary">
+    <meta property="og:title" content="Building a Program Synthesizer">
+    <meta property="og:description" content="Build a program synthesis tool, to generate programs from specifications, in 20 lines of code using Rosette.">
+
+    <link rel="alternate" type="application/rss+xml" href="https://www.cs.utexas.edu/~bornholt/posts.xml">
+
+    <link rel="stylesheet" href="Building%20a%20Program%20Synthesizer%20%E2%80%94%20James%20Bornholt_files/css.css" type="text/css">
+    <link rel="stylesheet" href="Building%20a%20Program%20Synthesizer%20%E2%80%94%20James%20Bornholt_files/carlito.css" type="text/css">
+    <link rel="stylesheet" href="Building%20a%20Program%20Synthesizer%20%E2%80%94%20James%20Bornholt_files/normalize.min.css" type="text/css">
+    <link rel="stylesheet" href="Building%20a%20Program%20Synthesizer%20%E2%80%94%20James%20Bornholt_files/main.css" type="text/css">
+    <link rel="stylesheet" href="Building%20a%20Program%20Synthesizer%20%E2%80%94%20James%20Bornholt_files/highlight.css" type="text/css">
+
+    <script src="Building%20a%20Program%20Synthesizer%20%E2%80%94%20James%20Bornholt_files/main.js" async=""></script>
+</head>
+<body class="posts-2018-07-10-building-synthesizer page">
+    
+    <header>
+    <div id="header-container">
+        <div id="header">
+            
+            <div id="header-content">
+                <h1><a href="https://www.cs.utexas.edu/~bornholt/">James Bornholt</a></h1>
+                <div class="header-block">
+                    Assistant Professor of Computer Science<br><a href="https://cs.utexas.edu/">University of Texas at Austin</a>
+                </div>
+                <div class="header-block">
+                    <div class="header-link"><i class="icon-mail"></i> <a target="_blank" id="contact" href="mailto:bornholt@cs.utexas.edu">bornholt@cs.utexas.edu</a></div><br>
+                    <div class="header-link"><i class="icon-building"></i> <a target="_blank" href="https://goo.gl/maps/MLgA1YBr1vg8AzsD9">GDC 5.720</a></div><br>
+                    <div class="header-link header-link-pad"><i class="icon-doc"></i> <a href="https://www.cs.utexas.edu/~bornholt/cv.html">CV</a></div>
+                    <div class="header-link"><i class="icon-github"></i> <a href="https://github.com/jamesbornholt">GitHub</a></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    </header>
+    
+    <div id="content">
+        <h2 class="blog-title">Building a Program Synthesizer</h2>
+<h3 class="blog-date">10 July 2018</h3>
+<p class="tagline"><a href="https://github.com/Nitr0-G" style="color: gray; text-decoration:none">Перевел: Nitr0-G</a><br></p>
+
+<blockquote class="blog-summary"><p>Создайте инструмент <a href="https://homes.cs.washington.edu/~bornholt/post/synthesis-explained.html">program synthesis</a> для генерации программ на основе спецификаций в 20 строках кода, используя <a href="http://emina.github.io/rosette/">Rosette</a>.</p>
+</blockquote>
+
+
+<p>В <a href="https://www.cs.utexas.edu/~bornholt/post/synthesis-explained.html">предыдущем посте</a>, мы видели краткий обзор <em>program synthesis</em> алгоритмов, которые автоматически генерируют программу для реализации желаемой спецификации. Хотя эти алгоритмы являются захватывающей и развивающейся областью исследований, вам не нужно внедрять их самостоятельно. Сегодня мы увидим, как создать программный синтезатор, используя существующие инструменты.</p>
+
+<h2 id="getting-started-with-rosette">Getting started with Rosette</h2>
+
+<p>Существует несколько отличных готовых фреймворков для синтеза программ. Оригиналом является <a href="https://bitbucket.org/gatoatigrado/sketch-frontend/wiki/Home">Sketch</a>, который предлагает Java-язык, оснащенный функциями синтеза. Существует также <a href="http://www.sygus.org/index.html">syntax-guided synthesis language</a>, этот фреймворк, в свою очередь, предлагает общий интерфейс для нескольких различных механизмов синтеза.</p>
+
+<p>В этом посте мы собираемся использовать <a href="http://emina.github.io/rosette/">Rosette</a>, , который добавляет поддержку synthesis и verification для языка <a href="http://racket-lang.org/">Racket</a>. Самое приятное в Rosette то, что это расширение Racket, поэтому мы сможем использовать многие приятные функции Racket (например, pattern matching) при создании нашего synthesizer.</p>
+
+<blockquote class="callout">
+  <p><strong>Following along</strong>: the code for this post is <a href="https://gist.github.com/jamesbornholt/b51339fb8b348b53bfe8a5c66af66efe">available on GitHub</a>. If you’d like to follow along, you’ll need to <a href="https://download.racket-lang.org/">install Racket</a> and <a href="http://emina.github.io/rosette/rosette-guide/ch_getting-started.html">Rosette</a>. Then you’ll be able to run Rosette programs either with the DrRacket IDE or the <code class="language-plaintext highlighter-rouge">racket</code> command-line interpreter.</p>
+</blockquote>
+
+<h3 id="programming-with-constraints">Programming with constraints</h3>
+
+<p>Ключевой особенностью Rosette является программирование с и solving, <em>constraint'ов</em>. Вместо программы, в которой все переменные имеют известные значения, программа Rosette имеет некоторые <em>неизвестные</em> переменные, которые мы называем <strong>symbolic variables</strong>. Значения symbolic variables будут определены автоматически в соответствии с созданными нами ограничениями(constaint'ами).</p>
+
+<p>Например, мы можем попытаться найти int'овое число, которое предположительно будет равно 5:</p>
+
+<figure class="highlight"><pre><code class="language-racket" data-lang="racket"><span class="o">#</span><span class="nv">lang</span> <span class="nv">rosette/safe</span>
+
+<span class="c1">; Compute the absolute value of `x`.</span>
+<span class="p">(</span><span class="k">define</span> <span class="p">(</span><span class="nf">absv</span> <span class="nv">x</span><span class="p">)</span>
+  <span class="p">(</span><span class="k">if</span> <span class="p">(</span><span class="nb">&lt;</span> <span class="nv">x</span> <span class="mi">0</span><span class="p">)</span> <span class="p">(</span><span class="nb">-</span> <span class="nv">x</span><span class="p">)</span> <span class="nv">x</span><span class="p">))</span>
+
+<span class="c1">; Define a symbolic variable called y of type integer.</span>
+<span class="p">(</span><span class="k">define-symbolic</span> <span class="nv">y</span> <span class="nv">integer?</span><span class="p">)</span>
+
+<span class="c1">; Solve a constraint saying |y| = 5.</span>
+<span class="p">(</span><span class="k">solve</span>
+  <span class="p">(</span><span class="k">assert</span> <span class="p">(</span><span class="nb">=</span> <span class="p">(</span><span class="nf">absv</span> <span class="nv">y</span><span class="p">)</span> <span class="mi">5</span><span class="p">)))</span></code></pre></figure>
+
+<p>Output:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>(model
+ [y -5])
+</code></pre></div></div>
+
+<p>Это способ Rosette сказать, что она нашла <em>модель</em> (т.е. она нашла значения для всех неизвестных symbolic variables) в этом случае <code class="language-plaintext highlighter-rouge">y</code> принимает значение -5. Модель удовлетворяет всем constraint'ам(это можно переводить разными словами в определенных случаях, тут это обозначает ОДЗ, т.е. сама модель удолетворяет всем ОДЗ, которые мы обозначили ранее), которые мы сгенерировали с помощью <code class="language-plaintext highlighter-rouge">assert</code>,  который в данном случае был всего лишь одним ОДЗ <code class="language-plaintext highlighter-rouge">(= (absv y) 5)</code>.</p>
+
+<p>Теперь давайте попробуем перехитрить Rosette попросив невозможное — значение <code class="language-plaintext highlighter-rouge">y</code> чье абсолютное значение будет отрицательно:</p>
+
+<figure class="highlight"><pre><code class="language-racket" data-lang="racket"><span class="p">(</span><span class="k">solve</span> <span class="p">(</span><span class="k">assert</span> <span class="p">(</span><span class="nb">&lt;</span> <span class="p">(</span><span class="nf">absv</span> <span class="nv">y</span><span class="p">)</span> <span class="mi">0</span><span class="p">)))</span></code></pre></figure>
+
+<p>Конечно, Rosette  соглашается, что это невозможно, и возвращается:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>(unsat)
+</code></pre></div></div>
+
+<p>Это <em>unsatisfiable</em> solution: здесь нет возможных <code class="language-plaintext highlighter-rouge">y</code> чье абсолютное значение отрицательно.</p>
+
+<p>Таким образом, программирование constaint'ов позволяет нам находить наши неизвестные автоматически - нам нужно лишь задать предположительное ОДЗ. Эта способность будет лежать в основе нашего подхода к синтезу программ. Есть ещё множество подобных интересных примеров здесь: <a href="http://emina.github.io/rosette/rosette-guide/ch_essentials.html">Rosette documentation</a>.</p>
+
+<blockquote>
+  <p><strong>Примечание </strong>: Rosette’s <code class="language-plaintext highlighter-rouge">(solve ...)</code> работает путем компиляции ограничений и отправки их в <a href="https://github.com/Z3Prover/z3">Z3 SMT solver</a>, который предоставляет высокопроизводительные алгоритмы решения для различных типов ОДЗ. <a href="http://rise4fun.com/Z3/tutorial/guide">Z3 tutorial</a> - это хорошее введение в этот низкоуровневый стиль программирования с заданными ОДЗ, который Rosette абстрагирует.</p>
+</blockquote>
+
+<h2 id="domain-specific-languages-programs-in-programs">Domain-specific languages: programs in programs</h2>
+
+<p>Программный синтез аналогичен задачам, которые мы только что решили: есть некоторые неизвестные, значения которых мы хотим найти, с учетом некоторых ОДЗ. Но в синтезе неизвестными являются <em>programs</em>, обычно заимствованные из <em>domain-specific language</em> (DSL).</p>
+
+<p>DSL - это всего лишь небольшой язык программирования, оснащенный именно теми функциями, которые нас интересуют. Вы можете создать DSL практически для чего угодно. В нашем исследовании мы создали DSLs для работы по синтезу в области <a href="http://sandcat.cs.washington.edu/ferrite/">file system crash safety</a>,
+<a href="http://memsynth.uwplse.org/">memory consistency</a>, и <a href="http://synapse.uwplse.org/">approximate hardware</a>, а другие сделали то же самое для <a href="http://bagpipe.uwplse.org/bagpipe/">network configuration</a> и <a href="http://homes.cs.washington.edu/~emina/pubs/rulesynth.its16.pdf">K–12 algebra tutoring</a>.</p>
+
+<p>DSL являются фундаментальными в синтезе программ, поскольку они определяют <em>пространство поиска</em> — набор возможных значений для “неизвестной программы”. Если DSL слишком сложен, может оказаться трудным решить задачу синтеза, поскольку необходимо рассмотреть множество программ. Но если DSL слишком прост, он не сможет выразить интересное поведение. Контроль за этим компромиссом имеет решающее значение для создания практических инструментов синтеза.</p>
+
+<h3 id="a-simple-arithmetic-dsl">A simple arithmetic DSL</h3>
+
+<p>Сегодня мы собираемся определить тривиальный DSL для арифметических операций. Программы, которые мы синтезируем в этом DSL, будут представлять собой арифметические выражения типа <code class="language-plaintext highlighter-rouge">(plus x y)</code>. Хотя это не особенно захватывающий DSL, его будет просто реализовать и продемонстрировать.</p>
+
+<p>Каждый DSL нуждается в двух частях: его <strong>синтаксисе</strong> (как выглядят программы) и его <strong>семантике</strong> (что означают программы).</p>
+
+<h4 id="syntax">Syntax</h4>
+<p>Синтаксис для нашего DSL будет использовать поддержку <a href="https://docs.racket-lang.org/guide/define-struct.html#%28part._.Simple_.Structure_.Types__struct%29">structures</a> Racket. Мы определим новый тип структуры для каждой операции в нашем языке:</p>
+
+<figure class="highlight"><pre><code class="language-racket" data-lang="racket"><span class="p">(</span><span class="nf">struct</span> <span class="nv">plus</span> <span class="p">(</span><span class="nf">left</span> <span class="nv">right</span><span class="p">)</span> <span class="nt">#:transparent</span><span class="p">)</span>
+<span class="p">(</span><span class="nf">struct</span> <span class="nv">mul</span> <span class="p">(</span><span class="nf">left</span> <span class="nv">right</span><span class="p">)</span> <span class="nt">#:transparent</span><span class="p">)</span>
+<span class="p">(</span><span class="nf">struct</span> <span class="nv">square</span> <span class="p">(</span><span class="nf">arg</span><span class="p">)</span> <span class="nt">#:transparent</span><span class="p">)</span></code></pre></figure>
+
+<p>Мы определили три оператора в нашем языке: два оператора <code class="language-plaintext highlighter-rouge">plus</code> и <code class="language-plaintext highlighter-rouge">mul</code>, каждый из которых принимает по два аргумента, и оператор <code class="language-plaintext highlighter-rouge">square</code>, который принимает только один аргумент. Определения структуры дают имена полям структуры (<code class="language-plaintext highlighter-rouge">left</code> и <code class="language-plaintext highlighter-rouge">right</code>для операторов с двумя аргументами и <code class="language-plaintext highlighter-rouge">arg</code> для оператора с одним аргументом). Аннотация <code class="language-plaintext highlighter-rouge">#:transparent</code>просто сообщает Racket автоматически генерировать некоторые тонкости для наших структур, такие как строковые представления и предикаты равенства. <sup id="fnref:transparent" role="doc-noteref"><a href="#fn:transparent" class="footnote" rel="footnote">1</a></sup></p>
+
+<p>Наш синтаксис позволяет писать использовать подобный синтаксис в программах</p>
+
+<figure class="highlight"><pre><code class="language-racket" data-lang="racket"><span class="p">(</span><span class="k">define</span> <span class="nv">prog</span> <span class="p">(</span><span class="nf">plus</span> <span class="p">(</span><span class="nf">square</span> <span class="mi">7</span><span class="p">)</span> <span class="mi">3</span><span class="p">))</span></code></pre></figure>
+
+<p>Для обозначения математического выражения 7<sup>2</sup> + 3. По сути, мы пишем программы на нашем DSL, создавая <a href="https://en.wikipedia.org/wiki/Abstract_syntax_tree">abstract syntax trees</a>для интересующих нас выражений.</p>
+
+<h4 id="semantics">Semantics</h4>
+<p>Теперь, когда мы знаем, как выглядят программы в нашем DSL, нам нужно сказать, что они означают. Для этого мы внедрим простой <em>interpreter</em> для программ в нашем DSL. Интерпретатор принимает в качестве входных данных программу, выполняет вычисления, описанные программой, и возвращает выходное значение. Например, мы ожидали бы, что приведенная выше программа вернет значение 52.</p>
+
+<p>Наш маленький интерпретатор просто повторяет синтаксис, используя сопоставление с <a href="https://docs.racket-lang.org/rosette-guide/sec_utility-libs.html?q=destruct#%28form._%28%28lib._rosette%2Flib%2Fdestruct..rkt%29._destruct%29%29">pattern matching</a>:</p>
+
+<figure class="highlight"><pre><code class="language-racket" data-lang="racket"><span class="p">(</span><span class="k">define</span> <span class="p">(</span><span class="nf">interpret</span> <span class="nv">p</span><span class="p">)</span>
+  <span class="p">(</span><span class="nf">destruct</span> <span class="nv">p</span>
+    <span class="p">[(</span><span class="nf">plus</span> <span class="nv">a</span> <span class="nv">b</span><span class="p">)</span>  <span class="p">(</span><span class="nb">+</span> <span class="p">(</span><span class="nf">interpret</span> <span class="nv">a</span><span class="p">)</span> <span class="p">(</span><span class="nf">interpret</span> <span class="nv">b</span><span class="p">))]</span>
+    <span class="p">[(</span><span class="nf">mul</span> <span class="nv">a</span> <span class="nv">b</span><span class="p">)</span>   <span class="p">(</span><span class="nb">*</span> <span class="p">(</span><span class="nf">interpret</span> <span class="nv">a</span><span class="p">)</span> <span class="p">(</span><span class="nf">interpret</span> <span class="nv">b</span><span class="p">))]</span>
+    <span class="p">[(</span><span class="nf">square</span> <span class="nv">a</span><span class="p">)</span>  <span class="p">(</span><span class="nb">expt</span> <span class="p">(</span><span class="nf">interpret</span> <span class="nv">a</span><span class="p">)</span> <span class="mi">2</span><span class="p">)]</span>
+    <span class="p">[</span><span class="nf">_</span> <span class="nv">p</span><span class="p">]))</span></code></pre></figure>
+
+<p>Рекурсия имеет базовый вариант <code class="language-plaintext highlighter-rouge">[_ p]</code>— в шаблонах Racket <code class="language-plaintext highlighter-rouge">_</code>соответствует любому значению — который просто возвращает входную программу <code class="language-plaintext highlighter-rouge">p</code>. Этот базовый вариант обрабатывает константы в наших программах.</p>
+
+<p>Если мы вызовем наш интерпретатор для p выше<code class="language-plaintext highlighter-rouge">(plus (square 7) 3)</code>:</p>
+
+<figure class="highlight"><pre><code class="language-racket" data-lang="racket"><span class="p">(</span><span class="nf">interpret</span> <span class="nv">prog</span><span class="p">)</span></code></pre></figure>
+
+<p>Мы можем получить значение, которое вычислил solver Z3 в Rosette: </p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>52
+</code></pre></div></div>
+
+<h2 id="synthesis-with-dsls">Synthesis with DSLs</h2>
+
+<p>Поскольку наш интерпретатор - это просто код Racket, Rosette заставит его работать даже при использовании символьных переменных. Например, эта программа:</p>
+
+<figure class="highlight"><pre><code class="language-racket" data-lang="racket"><span class="p">(</span><span class="nf">interpret</span> <span class="p">(</span><span class="nf">square</span> <span class="p">(</span><span class="nf">plus</span> <span class="nv">y</span> <span class="mi">2</span><span class="p">)))</span></code></pre></figure>
+
+<p>output: </p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>(* (+ 2 y) (+ 2 y))
+</code></pre></div></div>
+
+<p>Поскольку <code class="language-plaintext highlighter-rouge">y</code> - symbolic variable. “lifting” подобный этому поведению поразумевает то, что мы можем обрабатывать простые программы в нашем DSL. Например, существует ли такое значение <code class="language-plaintext highlighter-rouge">y</code> который позволяет получить этой p <code class="language-plaintext highlighter-rouge">(square (plus y 2))</code> значение 25?</p>
+
+<figure class="highlight"><pre><code class="language-racket" data-lang="racket"><span class="p">(</span><span class="k">solve</span> 
+  <span class="p">(</span><span class="k">assert</span> 
+    <span class="p">(</span><span class="nb">=</span> <span class="p">(</span><span class="nf">interpret</span> <span class="p">(</span><span class="nf">square</span> <span class="p">(</span><span class="nf">plus</span> <span class="nv">y</span> <span class="mi">2</span><span class="p">)))</span> <span class="mi">25</span><span class="p">)))</span></code></pre></figure>
+
+<p>На самом деле Rosette был слишком умен для меня, и дал ответ, который я не ожидал:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>(model
+ [y -7])
+</code></pre></div></div>
+
+<p>Я думал, что <code class="language-plaintext highlighter-rouge">y</code> будет равен 3, но, конечно, (-7 + 2)<sup>2</sup> - это выражение также равно 25.</p>
+
+<p>Это наша первая синтезированная программа! Это не очень интересная программа — <code class="language-plaintext highlighter-rouge">(square (plus -7 2))</code>но это, безусловно, форма синтеза: мы нашли программу, которая удовлетворяет ограничению.<sup id="fnref:progsynth" role="doc-noteref"><a href="#fn:progsynth" class="footnote" rel="footnote">2</a></sup></p>
+
+<h3 id="dealing-with-program-inputs">Dealing with program inputs</h3>
+
+<p>Одна вещь, которой не хватает в приведенном выше обобщении, - это понятие “input”.
+Без input, программы в нашем DSL на самом деле являются просто константными выражениями. Другими словами, мы могли бы захотеть найти константу <code class="language-plaintext highlighter-rouge">c</code> такую, чтобы <code class="language-plaintext highlighter-rouge">(mul c x)</code> было равно <code class="language-plaintext highlighter-rouge">x + x</code>
+<em>для каждого возможного <code class="language-plaintext highlighter-rouge">x</code></em>, а не только для одного <code class="language-plaintext highlighter-rouge">x</code>.</p>
+
+<p>Наш предыдущий подход не сможет воспроизвести подобный примеры выше. Если мы попытаемся воспроизвести такую p: </p>
+
+<figure class="highlight"><pre><code class="language-racket" data-lang="racket"><span class="p">(</span><span class="k">define-symbolic</span> <span class="nv">x</span> <span class="nv">c</span> <span class="nv">integer?</span><span class="p">)</span>
+<span class="p">(</span><span class="k">solve</span> 
+  <span class="p">(</span><span class="k">assert</span> 
+    <span class="p">(</span><span class="nb">=</span> <span class="p">(</span><span class="nf">interpret</span> <span class="p">(</span><span class="nf">mul</span> <span class="nv">c</span> <span class="nv">x</span><span class="p">))</span> <span class="p">(</span><span class="nb">+</span> <span class="nv">x</span> <span class="nv">x</span><span class="p">))))</span></code></pre></figure>
+
+<p>Rosette выдаёт такие значения для наших неизвестных:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>(model
+ [x 0]
+ [c 0])
+</code></pre></div></div>
+
+<p>а это не совсем то, чего мы хотели. Что он сделал, так это нашел значение как для <code class="language-plaintext highlighter-rouge">c</code> <em>и для </em> <code class="language-plaintext highlighter-rouge">x</code>, которое удовлетворяло ограничению — конечно, <code class="language-plaintext highlighter-rouge">(mul 0 0)</code> равен <code class="language-plaintext highlighter-rouge">0 + 0</code>.</p>
+
+<p>Что мы хотим, так это сказать Rosette, чтобы он нашел значение <code class="language-plaintext highlighter-rouge">c</code>, которое работает для <em>каждого</em> <code class="language-plaintext highlighter-rouge">x</code>, а не только для одного. Чтобы сделать это, мы попросим Rosette <em>синтезировать</em>, а не решать, используя ее форму <code class="language-plaintext highlighter-rouge">synthesize</code>. Например:</p>
+
+<figure class="highlight"><pre><code class="language-racket" data-lang="racket"><span class="p">(</span><span class="k">synthesize</span>
+  <span class="nt">#:forall</span> <span class="p">(</span><span class="nb">list</span> <span class="nv">x</span><span class="p">)</span>
+  <span class="nt">#:guarantee</span> <span class="p">(</span><span class="k">assert</span> <span class="p">(</span><span class="nb">=</span> <span class="p">(</span><span class="nf">interpret</span> <span class="p">(</span><span class="nf">mul</span> <span class="nv">c</span> <span class="nv">x</span><span class="p">))</span> <span class="p">(</span><span class="nb">+</span> <span class="nv">x</span> <span class="nv">x</span><span class="p">))))</span></code></pre></figure>
+
+<p>Здесь мы просим Розетт заполнить неизвестные таким образом, чтобы ОДЗ (<code class="language-plaintext highlighter-rouge">#:guarantee</code> part) выполнялось для любого возможного значения <code class="language-plaintext highlighter-rouge">x</code> (<code class="language-plaintext highlighter-rouge">#:forall</code> part). Мы находим ответ, который, вероятно, ожидаем:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>(model
+ [c 2])
+</code></pre></div></div>
+
+<p>Другими словами, <code class="language-plaintext highlighter-rouge">(mul 2 x)</code> эквивалентен <code class="language-plaintext highlighter-rouge">x + x</code>. Сюрприз!</p>
+
+<p>Что замечательно, так это то, что синтезатор обнаружил эту идентичность (которая является свойством нашего DSL) сам по себе. Нам не нужно было обучать его каким-либо правилам перезаписи или алгебраическим законам, как нам пришлось бы делать, если бы мы создавали обычный компилятор, но вместо этого мы рассказали ему только о семантике нашего DSL.</p>
+
+<h2 id="a-fancier-example">A fancier example</h2>
+
+<p><a href="https://cs.cornell.edu/~asampson/">Adrian Sampson</a> сделал отличный <a href="https://www.cs.cornell.edu/~asampson/blog/minisynth.html">introduction</a> для программного синтеза используя Z3 без каких-либо надстроек. Я подумал, что было бы интересно посмотреть, как его пример языка будет проявляться в Rosette.</p>
+
+<p>Язык Адриана в основном похож на наш, но он поддерживает <em>sketches</em>.
+A sketch - просто шаблон с <em>неизвестными</em> для того, чтобы синтезер вычислил их. В нашем примере выше 
+<code class="language-plaintext highlighter-rouge">(mul c x)</code> был шаблоном,
+а<code class="language-plaintext highlighter-rouge">c</code> неизвестной для вычисления.
+Но реальные шаблоны могут сделать больше, чем просто указать неизвестные константы — они также могут указать неизвестные <em>programs</em>. В качестве выдуманного примера мы могли бы захотеть узнать, может ли <code class="language-plaintext highlighter-rouge">(mul 10 x)</code> быть разложено как <em>сумма</em> двух выражений (например, <code class="language-plaintext highlighter-rouge">(plus (mul 9 x) x)</code>).</p>
+
+<p>Подход Rosette к шаблонам немного отличается от подхода в коде Адриана (который добавляет условные обозначения в DSL для создания шаблонов). 
+Экземпляры нашего синтаксиса DSL являются первоклассными значениями в Rosette, и поэтому мы можем манипулировать ими точно так же, как любым другим значением. 
+Мы собираемся создать простую функцию <code class="language-plaintext highlighter-rouge">??expr</code>, которая возвращает неизвестное выражение, учитывая некоторые ОДЗ на значения, которые могут быть выходными из этого выражения:</p>
+
+<figure class="highlight"><pre><code class="language-racket" data-lang="racket"><span class="p">(</span><span class="k">define</span> <span class="p">(</span><span class="nf">??expr</span> <span class="nv">terminals</span><span class="p">)</span>
+  <span class="p">(</span><span class="k">define</span> <span class="nv">a</span> <span class="p">(</span><span class="nb">apply</span> <span class="nv">choose*</span> <span class="nv">terminals</span><span class="p">))</span>
+  <span class="p">(</span><span class="k">define</span> <span class="nv">b</span> <span class="p">(</span><span class="nb">apply</span> <span class="nv">choose*</span> <span class="nv">terminals</span><span class="p">))</span>
+  <span class="p">(</span><span class="nf">choose*</span> <span class="p">(</span><span class="nf">plus</span> <span class="nv">a</span> <span class="nv">b</span><span class="p">)</span>
+           <span class="p">(</span><span class="nf">mul</span> <span class="nv">a</span> <span class="nv">b</span><span class="p">)</span>
+           <span class="p">(</span><span class="nf">square</span> <span class="nv">a</span><span class="p">)</span>
+           <span class="nv">a</span><span class="p">))</span></code></pre></figure>
+
+<p>Процедура <code class="language-plaintext highlighter-rouge">choose*</code> предоставляется Rosette, и именно здесь происходит волшебство. 
+Учитывая <em>n</em> аргументов, функция <code class="language-plaintext highlighter-rouge">choose*</code> возвращает единственное значение, которое может быть вычислено для любого из <em>n</em> аргументов. 
+Наша функция <code class="language-plaintext highlighter-rouge">??expr</code> создает неизвестное выражение, сначала создавая два значения <code class="language-plaintext highlighter-rouge">a</code> и <code class="language-plaintext highlighter-rouge">b</code>, каждое из которых может быть преобразовано в любое из значений в <code class="language-plaintext highlighter-rouge">terminals</code>. Затем, <code class="language-plaintext highlighter-rouge">??expr</code> возвращает выражение, которое применяет любой из наших операторов DSL к этим двум значениям <code class="language-plaintext highlighter-rouge">a</code> и <code class="language-plaintext highlighter-rouge">b</code>, или может вычисляться непосредственно на одном из <code class="language-plaintext highlighter-rouge">terminals</code> Например, если мы вызовем <code class="language-plaintext highlighter-rouge">(??expr (list 2 x))</code>, результирующее выражение может быть вычислено как <code class="language-plaintext highlighter-rouge">2</code>, <code class="language-plaintext highlighter-rouge">x</code>, <code class="language-plaintext highlighter-rouge">(plus 2 x)</code>, <code class="language-plaintext highlighter-rouge">(plus 2 2)</code> и так далее (но не множественные вложения — <code class="language-plaintext highlighter-rouge">(plus (plus 2 x) 2)</code> невозможно с этим определением).</p>
+
+<p>Теперь мы можем использовать наше средство неизвестных выражений, чтобы ответить на наш животрепещущий вопрос выше — как нам записать <code class="language-plaintext highlighter-rouge">(mul 10 x)</code> Сначала мы определяем шаблон нашей желаемой программы, представляющий собой сумму двух неизвестных выражений:</p>
+
+<figure class="highlight"><pre><code class="language-racket" data-lang="racket"><span class="p">(</span><span class="k">define-symbolic</span> <span class="nv">p</span> <span class="nv">q</span> <span class="nv">integer?</span><span class="p">)</span>  <span class="c1">; get access to more constants</span>
+<span class="p">(</span><span class="k">define</span> <span class="nv">sketch</span>
+  <span class="p">(</span><span class="nf">plus</span> <span class="p">(</span><span class="nf">??expr</span> <span class="p">(</span><span class="nb">list</span> <span class="nv">x</span> <span class="nv">p</span> <span class="nv">q</span><span class="p">))</span> <span class="p">(</span><span class="nf">??expr</span> <span class="p">(</span><span class="nb">list</span> <span class="nv">x</span> <span class="nv">p</span> <span class="nv">q</span><span class="p">))))</span></code></pre></figure>
+
+<p>Теперь мы вызываем  <code class="language-plaintext highlighter-rouge">synthesize</code>, чтобы найти решение:</p>
+
+<figure class="highlight"><pre><code class="language-racket" data-lang="racket"><span class="p">(</span><span class="k">define</span> <span class="nv">M</span>
+  <span class="p">(</span><span class="k">synthesize</span>
+    <span class="nt">#:forall</span> <span class="p">(</span><span class="nb">list</span> <span class="nv">x</span><span class="p">)</span>
+    <span class="nt">#:guarantee</span> <span class="p">(</span><span class="k">assert</span> <span class="p">(</span><span class="nb">=</span> <span class="p">(</span><span class="nf">interpret</span> <span class="nv">sketch</span><span class="p">)</span> <span class="p">(</span><span class="nf">interpret</span> <span class="p">(</span><span class="nf">mul</span> <span class="mi">10</span> <span class="nv">x</span><span class="p">))))))</span>
+
+<span class="p">(</span><span class="nf">evaluate</span> <span class="nv">sketch</span> <span class="nv">M</span><span class="p">)</span></code></pre></figure>
+
+<p>В отличие от предыдущих примеров, мы сохраняем результат <code class="language-plaintext highlighter-rouge">synthesize</code> в переменной <code class="language-plaintext highlighter-rouge">M</code>. Затем мы используем процедуру <code class="language-plaintext highlighter-rouge">evaluate</code>, которая <em>заменяет</em> конкретные значения для любых symbolic variables в <code class="language-plaintext highlighter-rouge">шаблоне</code> в соответствии с привязками в <code class="language-plaintext highlighter-rouge">M</code>.
+The result of evaluating our sketch against the model <code class="language-plaintext highlighter-rouge">M</code>
+is our synthesized program:</p>
+
+<div class="language-plaintext highlighter-rouge"><div class="highlight"><pre class="highlight"><code>(plus (mul 8 x) (plus x x))
+</code></pre></div></div>
+
+<p>Если вы правильно посчитаете, то обнаружите, что 8<em>x</em> + <em>x</em> + <em>x</em> на самом деле равно 10<em>x</em>. Мы синтезировали (более медленную и глупую) программу!</p>
+
+<h2 id="wrapping-up">Wrapping up</h2>
+
+<p>На данный момент мы едва коснулись поверхности синтеза программ. Но мы уже сделали кое-что очень классное: обратите внимание, что когда мы создавали синтаксис и семантику для нашего DSL, мы вообще не думали о синтезе или символическом доказательстве. Простой интерпретатор для конкретных программ превратился в мощный инструмент автоматизированного доказательства, который можно использовать для решения, синтеза и проверки программ. Это ключевое обещание <a href="http://emina.github.io/rosette/">Rosette</a>: пишите свои программы для конкретной задачи и получайте эти мощные автоматизированные инструменты бесплатно.</p>
+
+<p>Что дальше? Что касается синтеза программ, то наибольший интерес в сообществе вызывает синтез на основе <em>example-based</em>. В наших программах, описанных выше, нам пришлось написать довольно подробные спецификации, чтобы получился синтез. Что, если бы мы могли вместо этого просто привести несколько <em>примеров </em> того, что мы хотим, чтобы наша программа выводила для конкретных входных данных? Этот подход предлагает гораздо более простые спецификации и является основой таких инструментов, как <a href="https://support.office.com/en-us/article/using-flash-fill-in-excel-3f9bcf1e-db93-4890-94a0-1578341f73f7">Flash Fill</a>, но имеет свои собственные сложности (например, что делать, если наши примеры неоднозначны?).</p>
+
+<p>Что касается формальных методов, то одной из ключевых проблем для автоматизированных инструментов доказательства, подобных тому, который мы только что создали, является <em>масштабируемость</em>Наши примеры хорошо работают с тривиальными спецификациями поверх тривиального DSL, но что, если мы хотим поговорить о реальном коде, например, о программном обеспечении для <a href="http://neutrons.uwplse.org/">clinical radiotherapy system</a>?
+Масштабирование автоматизированного инструмента доказательства требует тщательного проектирования. Мы работаем над <a href="http://synapse.uwplse.org/">новыми абстракциями</a>для инструментов синтеза и над лучшими способами выявления <a href="https://2018.splashcon.org/event/splash-2018-oopsla-finding-code-that-explodes-under-symbolic-evaluation">identify scalability bottlenecks</a> в инструментах автоматизированного рассуждения, но пока еще рано стремиться сделать автоматизированное доказательство доступным для всех.</p>
+
+<div class="footnotes" role="doc-endnotes">
+  <ol>
+    <li id="fn:transparent" role="doc-endnote">
+      <p><code class="language-plaintext highlighter-rouge">#:transparent</code> также имеет значение, специфичное для Rosette: структуры с этой аннотацией будут объединены вместе, когда это возможно, в то время как структуры без нее будут рассматриваться как изменяемые структуры, которые не могут быть объединены. 
+Это часто важно для производительности,<a href="http://homes.cs.washington.edu/~emina/pubs/rosette.pldi14.pdf">более подробно объясняется в документе Rosette.</a> <a href="#fnref:transparent" class="reversefootnote" role="doc-backlink">↩</a></p>
+    </li>
+    <li id="fn:progsynth" role="doc-endnote">
+      <p>Синтез программы, хотя люди, вероятно, не назвали бы это синтезом — это действительно <a href="https://parlab.eecs.berkeley.edu/sites/all/parlab/files/angelic-acm-dl.pdf">angelic execution</a>, поиск значений/значения, которая(ый) обеспечивает успешное завершение программы. 
+Чтобы назвать это синтезом программы, нам нужен универсальный квантификатор для всех возможных входных данных.<a href="#fnref:progsynth" class="reversefootnote" role="doc-backlink">↩</a></p>
+    </li>
+  </ol>
+</div>
+
+
+
+    </div>
+
+</body></html>
